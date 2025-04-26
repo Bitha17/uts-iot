@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Live Image Feed</title>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 20px;
+      background-color: #f9f9f9;
+    }
+
+    h1 {
+      margin-bottom: 30px;
+      position: sticky;
+      top: 0;
+      background: #f9f9f9;
+      padding: 10px 0;
+      z-index: 100;
+      border-bottom: 1px solid #ccc;
+    }
+
+    #imageContainer {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .image-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: white;
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .image-wrapper img {
+      width: 200px;
+      border-radius: 8px;
+      border: 2px solid #ccc;
+    }
+
+    .image-label {
+      margin-top: 8px;
+      font-size: 0.9em;
+      color: #555;
+      white-space: pre-line;
+    }
+  </style>
+</head>
+<body>
+  <h1>Live Image Feed</h1>
+  <div id="imageContainer"></div>
+
+  <script>
+    const socket = io("http://localhost:5000", {
+      transports: ["websocket"],
+    });
+    const imageContainer = document.getElementById("imageContainer");
+
+    socket.on("connect", () => {
+      console.log("✅ Connected to server");
+    });
+    
+    function extractTimestamp(filename) {
+      const parts = filename.split("_");
+      if (parts.length < 3) return 0;
+      const dateRaw = parts[2];
+      const timeRaw = parts[3].replace(".jpg", "");
+      const formattedTime = `${dateRaw.slice(0,4)}-${dateRaw.slice(4,6)}-${dateRaw.slice(6,8)}T` +
+                            `${timeRaw.slice(0,2)}:${timeRaw.slice(2,4)}:${timeRaw.slice(4,6)}`;
+      return new Date(formattedTime).getTime(); // timestamp in ms
+    }
+    
+    function extractLatencyFromFilename(filename) {
+      const now = Date.now();
+      return (now - extractTimestamp(filename)) / 1000; // in seconds
+    }
+    
+    function addImageToGallery(filename) {
+      const imgUrl = "/images/" + filename + "?t=" + Date.now();
+      const parts = filename.split("_");
+      const id = parts[1];
+      const dateRaw = parts[2];
+      const timeRaw = parts[3].replace(".jpg", "");
+      const formattedTime = `${dateRaw.slice(0,4)}-${dateRaw.slice(4,6)}-${dateRaw.slice(6,8)} ` +
+                            `${timeRaw.slice(0,2)}:${timeRaw.slice(2,4)}:${timeRaw.slice(4,6)}`;
+      const latency = extractLatencyFromFilename(filename);
+      
+      const wrapper = document.createElement("div");
+      wrapper.className = "image-wrapper";
+      
+      const img = document.createElement("img");
+      img.src = imgUrl;
+      img.alt = filename;
+  
+      const label = document.createElement("div");
+      label.className = "image-label";      
+      label.textContent = `Image ID: ${id}\nTime: ${formattedTime}\nLatency: ${latency.toFixed(2)}s`;
+
+      wrapper.appendChild(img);
+      wrapper.appendChild(label);
+      imageContainer.prepend(wrapper);
+    }
+
+    // Load existing images on page load
+    fetch("/images/list")
+      .then(response => response.json())
+      .then(images => {
+        // Sort filenames by timestamp descending (newest first)
+        images.sort((a, b) => {
+          const tsA = extractTimestamp(a);
+          const tsB = extractTimestamp(b);
+          return tsA - tsB; // sort descending
+        });
+
+        images.forEach(filename => {
+          addImageToGallery(filename);
+        });
+      });
+
+
+    socket.on("new_image", data => {
+      console.log("📥 New image received:", data.filename);
+      addImageToGallery(data.filename);
+    });
+  </script>
+</body>
+</html>
