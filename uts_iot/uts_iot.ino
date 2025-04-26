@@ -8,6 +8,7 @@ const char* password = "lantaitiga";
 const char* mqtt_server = "192.168.0.127";
 const int mqtt_port = 1883;
 const char* topic = "uts/iot13521111/imagechunk";
+const char* ENCRYPTION_KEY = "secretkey";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -19,7 +20,7 @@ int totalChunks = sample_jpg_len / RAW_CHUNK_SIZE + (sample_jpg_len % RAW_CHUNK_
 int imageID = 1;         // image counter
 unsigned long lastSendTime = 0;
 const int T = 2000;      // 2 seconds between transmissions
-const int K = 20;        // Send this many images
+const int K = 10;        // Send this many images
 
 int sentImages = 0;
 
@@ -60,11 +61,12 @@ void sendImageChunks(int imgID, time_t timestamp) {
     payload += "\"data\":\"";
 
     for (int j = 0; j < len; j++) {
+      uint8_t encrypted = sample_jpg[start + j] ^ ENCRYPTION_KEY[j % strlen(ENCRYPTION_KEY)];
       char buf[3];
-      sprintf(buf, "%02X", sample_jpg[start + j]);
+      sprintf(buf, "%02X", encrypted);
       payload += buf;
     }
-
+        
     payload += "\"}";
 
     // Try to publish with retry

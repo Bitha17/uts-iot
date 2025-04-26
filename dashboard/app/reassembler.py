@@ -14,6 +14,10 @@ chunk_timestamp = {}      # {image_id: timestamp}
 output_dir = "static/images"
 os.makedirs(output_dir, exist_ok=True)
 
+def xor_decrypt(data: bytes, key: str) -> bytes:
+    key_bytes = key.encode()
+    return bytes([b ^ key_bytes[i % len(key_bytes)] for i, b in enumerate(data)])
+
 def on_connect(client, userdata, flags, rc):
     print("Connected with result code", rc)
     client.subscribe("uts/iot13521111/imagechunk")
@@ -34,7 +38,8 @@ def on_message(client, userdata, msg):
             chunk_timestamp[img_id] = ts
 
         # Add chunk
-        image_chunks[img_id][chunk] = bytes.fromhex(hex_data)
+        decrypted = xor_decrypt(bytes.fromhex(hex_data), "secretkey")
+        image_chunks[img_id][chunk] = decrypted
         print(f"Received chunk {chunk + 1}/{total} for image {img_id}")
 
         # Check if complete
